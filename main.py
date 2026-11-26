@@ -5,6 +5,25 @@ import pandas as pd
 import streamlit as st
 
 
+@st.cache_resource(show_spinner=False)
+def load_classifier():
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
+    model_id = "protectai/deberta-v3-base-prompt-injection-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_id,
+        local_files_only=True,
+    )
+    return pipeline(
+        "text-classification",
+        model=model,
+        tokenizer=tokenizer,
+        truncation=True,
+        max_length=512,
+    )
+
+
 st.set_page_config(
     page_title="PromptShield | Security Dashboard",
     page_icon="🛡️",
@@ -186,22 +205,3 @@ if st.session_state.get("scan_in_progress", False):
     st.markdown('<div class="scan-wait"><div class="scan-wait-title"><span class="scan-pulse"></span>Running security analysis</div><div class="scan-wait-copy">The local model is checking the full prompt. This may take a few seconds.</div></div>', unsafe_allow_html=True)
 
 st.caption("Powered by Protect AI DeBERTa. English-focused classifier; results are estimates and may be wrong. It does not detect every jailbreak or support every language.")
-
-
-@st.cache_resource(show_spinner=False)
-def load_classifier():
-    from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
-
-    model_id = "protectai/deberta-v3-base-prompt-injection-v2"
-    tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_id,
-        local_files_only=True,
-    )
-    return pipeline(
-        "text-classification",
-        model=model,
-        tokenizer=tokenizer,
-        truncation=True,
-        max_length=512,
-    )
