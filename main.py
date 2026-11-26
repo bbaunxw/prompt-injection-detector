@@ -1,4 +1,5 @@
 from datetime import datetime
+import math
 
 import altair as alt
 import pandas as pd
@@ -63,6 +64,14 @@ st.markdown(
       @keyframes pulse { 70% { box-shadow:0 0 0 9px #4fc39a00; } 100% { box-shadow:0 0 0 0 #4fc39a00; } }
       .stCaption { color:var(--muted); }
       div[data-testid="stPlotlyChart"],div[data-testid="stVegaLiteChart"] { background:transparent; }
+      [data-testid="stVegaLiteChart"] > div, [data-testid="stVegaLiteChart"] canvas { background:transparent !important; }
+      .risk-gauge { position:relative; height:230px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; overflow:hidden; padding-top:12px; }
+      .risk-gauge svg { width:min(100%,330px); height:175px; overflow:visible; }
+      .gauge-value { position:absolute; bottom:42px; text-align:center; }
+      .gauge-number { font-size:2.4rem; font-weight:700; line-height:1; letter-spacing:-.05em; }
+      .gauge-caption { color:var(--muted); font-size:.82rem; margin-top:.45rem; }
+      .gauge-scale { width:100%; display:flex; justify-content:space-between; color:var(--muted); font-size:.75rem; margin-top:.5rem; }
+      .scan-input { margin-top:1rem; }
       @media (max-width: 700px) { .block-container { padding:1.2rem 1rem 2rem; } .dash-title { font-size:1.8rem; } }
     </style>
     """,
@@ -95,8 +104,7 @@ with top[2]:
 with top[3]:
     st.markdown(f'<div class="metric-card"><div class="eyebrow">Critical findings</div><div class="metric-value metric-critical">{critical_findings}</div></div>', unsafe_allow_html=True)
 with top[4]:
-    if st.button("＋  New Scan", type="primary", use_container_width=True):
-        st.session_state.show_scan = True
+    st.markdown('<div class="metric-card"><div class="eyebrow">Model status</div><div class="metric-value" style="font-size:1.15rem;color:#4fc39a">Ready</div></div>', unsafe_allow_html=True)
 
 chart_left, chart_right = st.columns([1.8, 1])
 with chart_left:
@@ -116,19 +124,66 @@ with chart_left:
 
 with chart_right:
     st.markdown('<div class="panel"><div class="panel-title">Severity Breakdown</div>', unsafe_allow_html=True)
-    risk_count = sum(scan["label"] == "INJECTION" for scan in scans)
-    safe_count = total_scans - risk_count
-    if total_scans:
-        severity = pd.DataFrame({"Result": ["Critical", "Safe"], "Count": [risk_count, safe_count]})
-        donut = alt.Chart(severity).mark_arc(innerRadius=62, outerRadius=95, stroke="#11182a").encode(
-            theta=alt.Theta("Count:Q"),
-            color=alt.Color("Result:N", scale=alt.Scale(domain=["Critical", "Safe"], range=["#ec777b", "#f28a3d"]), legend=alt.Legend(orient="bottom", labelColor="#aab4c6", title=None)),
-            tooltip=["Result", "Count"],
-        ).properties(height=250)
-        st.altair_chart(donut, use_container_width=True)
-    else:
-        st.caption("Severity data will appear after a scan.")
-        st.markdown('<div style="height:220px"></div>', unsafe_allow_html=True)
+    latest_risk = scans[-1]["risk"] if scans else 0
+    if "live_prompt_result" in st.session_state:
+        latest_risk = st.session_state.live_prompt_result["risk"]
+    gauge_color = "#4fc39a" if latest_risk < 35 else "#f2bd4b" if latest_risk < 70 else "#ef777c"
+    gauge_label = "Low risk" if latest_risk < 35 else "Moderate risk" if latest_risk < 70 else "High risk"
+    gauge_angle = -90 + (latest_risk / 100) * 180
+    gauge_start = -90
+    gauge_end = 90
+    radius = 78
+    center_x, center_y = 120, 100
+    end_x = center_x + radius * math.cos(math.radians(gauge_angle))
+    end_y = center_y + radius * math.sin(math.radians(gauge_angle))
+    start_x = center_x + radius * math.cos(math.radians(gauge_start))
+    start_y = center_y + radius * math.sin(math.radians(gauge_start))
+    large_arc = 1 if latest_risk > 50 else 0
+    gauge_svg = f'''<svg viewBox="0 0 240 125" role="img" aria-label="Latest prompt risk score {latest_risk} out of 100">
+      <path d="M 42 100 A 78 78 0 0 1 198 100" fill="none" stroke="#273249" stroke-width="16" stroke-linecap="round"/>
+      <path d="M {start_x:.1f} {start_y:.1f} A {radius} {radius} 0 {large_arc} 1 {end_x:.1f} {end_y:.1f}" fill="none" stroke="{gauge_color}" stroke-width="16" stroke-linecap="round"/>
+      <text x="35" y="120" fill="#8d98ad" font-size="10">0</text><text x="195" y="120" fill="#8d98ad" font-size="10">100</text>
+    </svg>'''
+    st.markdown(
+        f'<div class="risk-gauge">{gauge_svg}<div class="gauge-value"><div class="gauge-number" style="color:{gauge_color}">{latest_risk}<span style="font-size:1rem;color:#8d98ad">/100</span></div><div class="gauge-caption">{gauge_label}</div></div></div>',
+        unsafe_allow_html=True,
+    )
+    if "live_prompt_result" not in st.session_state and not scans:
+        st.caption("Enter text below and run a check to see its risk score.")
+    st.caption("Model estimate only; not a safety guarantee.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with st.container():
+    st.markdown('<div class="panel scan-input"><div class="panel-title">Check a prompt</div>', unsafe_allow_html=True)
+    prompt = st.text_area("Paste text to check", height=130, placeholder="Enter the text you want to inspect...", key="direct_prompt")
+    if st.button("Check Text", type="primary", key="direct_check"):
+        if not prompt.strip():
+            st.warning("Enter some text before checking.")
+        else:
+            try:
+                with st.status("Checking text...", expanded=True) as check_status:
+                    st.write("Loading the local security model (first run may take longer)")
+                    classifier = load_classifier()
+                    st.write("Analyzing the text")
+                    result = classifier(prompt.strip())[0]
+                    check_status.update(label="Check complete", state="complete", expanded=False)
+                label = result["label"].upper()
+                confidence = float(result["score"])
+                is_injection = label in {"INJECTION", "LABEL_1", "1"}
+                checked = {
+                    "risk": round(confidence * 100) if is_injection else round((1 - confidence) * 100),
+                    "label": "INJECTION" if is_injection else "SAFE",
+                    "confidence": confidence,
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "prompt_preview": prompt.strip()[:160],
+                }
+                st.session_state.live_prompt_result = checked
+                st.session_state.last_result = checked
+                st.session_state.scans.append({**checked, "scan_no": len(scans) + 1})
+                st.rerun()
+            except Exception as error:
+                st.error("The local classifier could not run. Confirm the model is installed and available.")
+                st.exception(error)
     st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="panel"><div class="panel-title">Findings by Attack Class</div>', unsafe_allow_html=True)
@@ -141,39 +196,6 @@ bars = alt.Chart(attack_data).mark_bar(color="#f28a3d", cornerRadiusTopLeft=5, c
 ).properties(height=190)
 st.altair_chart(bars, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
-
-if st.session_state.get("show_scan", False):
-    with st.expander("New prompt scan", expanded=True):
-        prompt = st.text_area("Prompt to scan", height=150, placeholder="Paste a prompt here...", key="scan_prompt")
-        if st.button("Run Scan", type="primary", key="run_scan"):
-            if not prompt.strip():
-                st.warning("Enter a prompt before running a scan.")
-            else:
-                try:
-                    with st.status("Preparing scan...", expanded=True) as scan_status:
-                        st.write("Loading the local security model (first run may take longer)")
-                        classifier = load_classifier()
-                        st.write("Analyzing the prompt")
-                        result = classifier(prompt.strip())[0]
-                        scan_status.update(label="Scan complete", state="complete", expanded=False)
-                    label = result["label"].upper()
-                    confidence = float(result["score"])
-                    is_injection = label in {"INJECTION", "LABEL_1", "1"}
-                    scan = {
-                        "scan_no": len(scans) + 1,
-                        "risk": round(confidence * 100) if is_injection else round((1 - confidence) * 100),
-                        "label": "INJECTION" if is_injection else "SAFE",
-                        "confidence": confidence,
-                        "time": datetime.now().strftime("%H:%M:%S"),
-                        "prompt_preview": prompt.strip()[:160],
-                    }
-                    st.session_state.scans.append(scan)
-                    st.session_state.last_result = scan
-                    st.session_state.show_scan = False
-                    st.rerun()
-                except Exception as error:
-                    st.error("The local classifier could not run. Confirm the model has been downloaded once.")
-                    st.exception(error)
 
 if "last_result" in st.session_state:
     result = st.session_state.last_result

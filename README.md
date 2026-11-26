@@ -1,6 +1,6 @@
 # PromptShield
 
-PromptShield is a hackathon prototype for checking English text for possible prompt injection before it is used with an AI assistant. It uses a pretrained Protect AI DeBERTa text classifier and presents the result in a small security dashboard.
+PromptShield is a hackathon prototype for checking English text for possible prompt injection before it is used with an AI assistant. Paste text directly into the dashboard, run a check, and review the model's result and risk gauge.
 
 ## What it does
 
@@ -9,6 +9,13 @@ PromptShield is a hackathon prototype for checking English text for possible pro
 - Keeps scan counts and charts for the current Streamlit session.
 - Runs inference locally after the model files have been downloaded.
 - Provides a small repeatable evaluation script for example prompts.
+
+## Submission contents
+
+- `main.py` — interactive Streamlit dashboard and prompt checker.
+- `evaluate_model.py` — repeatable small example-set evaluation.
+- `requirements.txt` — Python package requirements.
+- `README.md` — setup, limitations, and demo guide.
 
 ## Important limits
 
@@ -54,9 +61,9 @@ The script prints every prediction and simple precision, recall, and false-posit
 ## Hackathon demo outline (about 3 minutes)
 
 1. State the problem: instructions embedded in untrusted text can try to redirect an AI assistant.
-2. Show the dashboard and explain that its charts summarize only the current session.
-3. Scan one benign prompt, then one direct injection example.
-4. Show the classification, confidence, and risk score. Explain that confidence is not a safety guarantee.
+2. Paste one benign prompt directly into the dashboard and check it.
+3. Paste one direct injection example and check it.
+4. Show the classification, confidence, and risk gauge. Explain that confidence is not a safety guarantee.
 5. Mention the English focus and show the quoted-text case as a limitation to investigate.
 6. Close with the next step: evaluate a balanced test set and improve the workflow based on observed errors.
 
