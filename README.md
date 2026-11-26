@@ -7,7 +7,7 @@ PromptShield is a hackathon prototype for checking English text for possible pro
 - Classifies one submitted text as `INJECTION` or `SAFE`.
 - Shows model confidence and a simple risk score.
 - Keeps scan counts and charts for the current Streamlit session.
-- Runs inference locally after the model files have been downloaded.
+- Runs inference on the app host after downloading the model files from Hugging Face on first use.
 - Provides a small repeatable evaluation script for example prompts.
 
 ## Submission contents
@@ -23,7 +23,8 @@ PromptShield is a hackathon prototype for checking English text for possible pro
 - It detects prompt injection patterns learned during training; it is not a general jailbreak, malware, or AI safety scanner.
 - Model confidence is not a calibrated probability or a guarantee. False positives and false negatives are possible.
 - Scan history exists only in the current Streamlit session and is not saved to a database.
-- The model is downloaded from Hugging Face on first use. Later runs use local cached files.
+- The model is downloaded from Hugging Face on first use. Later runs use the host's cached files.
+- Streamlit Community Cloud must be able to reach Hugging Face during the first model load; its outbound network access is restricted to selected endpoints.
 
 ## Run locally
 

@@ -11,10 +11,9 @@ def load_classifier():
     from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
     model_id = "protectai/deberta-v3-base-prompt-injection-v2"
-    tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_id,
-        local_files_only=True,
     )
     return pipeline(
         "text-classification",
@@ -182,7 +181,11 @@ with st.container():
                 st.session_state.scans.append({**checked, "scan_no": len(scans) + 1})
                 st.rerun()
             except Exception as error:
-                st.error("The local classifier could not run. Confirm the model is installed and available.")
+                st.error("The prompt check could not run.")
+                st.caption(
+                    "On first use, the app downloads the classifier from Hugging Face. "
+                    "If this keeps happening, check the app's deployment logs."
+                )
                 st.exception(error)
     st.markdown('</div>', unsafe_allow_html=True)
 
