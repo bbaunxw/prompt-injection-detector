@@ -52,6 +52,8 @@ st.markdown(
 
 if "scans" not in st.session_state:
     st.session_state.scans = []
+if "show_scan" not in st.session_state:
+    st.session_state.show_scan = False
 
 scans = st.session_state.scans
 total_scans = len(scans)
@@ -129,14 +131,9 @@ if st.session_state.get("show_scan", False):
                 st.warning("Enter a prompt before running a scan.")
             else:
                 try:
-                    from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
-
-                    model_id = "protectai/deberta-v3-base-prompt-injection-v2"
                     with st.status("Preparing scan...", expanded=True) as scan_status:
-                        st.write("Loading the local security model")
-                        tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
-                        model = AutoModelForSequenceClassification.from_pretrained(model_id, local_files_only=True)
-                        classifier = pipeline("text-classification", model=model, tokenizer=tokenizer, truncation=True, max_length=512)
+                        st.write("Loading the local security model (first run may take longer)")
+                        classifier = load_classifier()
                         st.write("Analyzing the prompt")
                         result = classifier(prompt.strip())[0]
                         scan_status.update(label="Scan complete", state="complete", expanded=False)
@@ -149,6 +146,7 @@ if st.session_state.get("show_scan", False):
                         "label": "INJECTION" if is_injection else "SAFE",
                         "confidence": confidence,
                         "time": datetime.now().strftime("%H:%M:%S"),
+                        "prompt_preview": prompt.strip()[:160],
                     }
                     st.session_state.scans.append(scan)
                     st.session_state.last_result = scan
@@ -168,7 +166,42 @@ if "last_result" in st.session_state:
     with detail_col:
         st.markdown(f'<div class="panel"><div class="eyebrow">Model confidence</div><div class="metric-value">{result["confidence"]:.1%}</div><div class="eyebrow">Risk score: {result["risk"]}/100</div></div>', unsafe_allow_html=True)
 
+if scans:
+    with st.expander("Session scan history", expanded=False):
+        history = pd.DataFrame(
+            [
+                {
+                    "Scan": scan["scan_no"],
+                    "Time": scan["time"],
+                    "Result": scan["label"],
+                    "Risk score": scan["risk"],
+                    "Prompt preview": scan["prompt_preview"],
+                }
+                for scan in reversed(scans)
+            ]
+        )
+        st.dataframe(history, use_container_width=True, hide_index=True)
+
 if st.session_state.get("scan_in_progress", False):
     st.markdown('<div class="scan-wait"><div class="scan-wait-title"><span class="scan-pulse"></span>Running security analysis</div><div class="scan-wait-copy">The local model is checking the full prompt. This may take a few seconds.</div></div>', unsafe_allow_html=True)
 
 st.caption("Powered by Protect AI DeBERTa. English-focused classifier; results are estimates and may be wrong. It does not detect every jailbreak or support every language.")
+
+
+@st.cache_resource(show_spinner=False)
+def load_classifier():
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+
+    model_id = "protectai/deberta-v3-base-prompt-injection-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_id, local_files_only=True)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        model_id,
+        local_files_only=True,
+    )
+    return pipeline(
+        "text-classification",
+        model=model,
+        tokenizer=tokenizer,
+        truncation=True,
+        max_length=512,
+    )
